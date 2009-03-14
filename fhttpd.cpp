@@ -224,65 +224,9 @@ std::wstring link_to(const std::wstring &s, const bool dir = false)
 	return L"<a href=\"" + safeurl + (dir ? L"/" : L"") + L"\">" + safeurl + L"</a>";
 }
 
-void send_doctype(SOCKET client)
-{
-	send(client, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" 
-					"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\""
-					"\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\r\n"
-					"<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">\r\n");
-}
-
-void index_page_header(SOCKET client)
-{
-	send_base_headers(client);
-	send(client, "Content-Type: text/html; charset=utf-8\r\n");
-	send_end_headers(client);
-	send_doctype(client);
-	send(client, "<head><title></title></head><body><table><tr><th>Name</th><th>Size</th></tr>\r\n");
-}
-
-void index_page_footer(SOCKET client)
-{
-	send(client, "</table></body></html>\r\n");
-}
-
-void index_page(SOCKET client, const std::wstring &path)
-{
-	WIN32_FIND_DATA findd;
-	HANDLE h = FindFirstFile((path + L"*").c_str(), &findd);
-	if (h == INVALID_HANDLE_VALUE)
-		throw std::invalid_argument("find failed");
-
-	index_page_header(client);
-	do
-	{
-		if (findd.cFileName[0] == L'.' && (findd.cFileName[1] == 0 || (findd.cFileName[1] == L'.' && findd.cFileName[2] == 0)))
-			continue;
-		std::wstringstream wss;
-		const bool dir = (findd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY;
-		wss << L"<tr><td>" << link_to(findd.cFileName, dir) << L"</td><td>";
-		if (dir)
-			wss << L"&lt;DIR&gt;";
-		else
-			wss << filesize(findd.nFileSizeHigh, findd.nFileSizeLow);
-		wss << "</td></tr>\r\n";
-		send(client, wss.str());
-	}
-	while (FindNextFile(h, &findd));
-	index_page_footer(client);
-}
-
 void xml_index_page_footer(SOCKET client)
 {
 	send(client, "</FileListing>\r\n");
-}
-
-std::wstring tolower(const std::wstring &s)
-{
-	std::wstringstream ret;
-	for (std::wstring::const_iterator it = s.begin(); it != s.end(); ++it)
-		ret << (wchar_t)tolower(*it);
-	return ret.str();
 }
 
 void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &path)
