@@ -13,6 +13,8 @@
 #include <iomanip>
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <clocale>
 
 WSADATA wsaData;
 WORD version;
@@ -22,7 +24,17 @@ char timezone[tz_len];
 const int US_ENGLISH = 0x409;
 
 std::set<char> otherallowedchars;
-std::map<std::wstring, std::wstring> hashes;
+
+struct caseless_cmp_t
+{
+	bool operator() (const std::wstring &l, const std::wstring &r)
+	{
+		return _wcsicmp(l.c_str(), r.c_str()) < 0;
+	}
+};
+
+typedef std::map<std::wstring, std::wstring, caseless_cmp_t> hashes_t;
+hashes_t hashes;
 
 int send(IN SOCKET s, __in_bcount(len) const char FAR * buf, IN size_t len, IN int flags)
 {
@@ -304,8 +316,8 @@ void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &
 		if (!dir)
 		{
 			wss << L" Size=\"" << filesize(findd.nFileSizeHigh, findd.nFileSizeLow) << L"\"";
-			const std::wstring search = tolower(path + findd.cFileName);
-			const std::map<std::wstring, std::wstring>::const_iterator it = hashes.find(search);
+			const std::wstring search = path + findd.cFileName;
+			const hashes_t::const_iterator it = hashes.find(search);
 			if (it != hashes.end())
 				wss << L" TTH=\"" << it->second << "\"";
 		}
@@ -414,6 +426,7 @@ int main()
 	otherallowedchars.insert('}');
 	// Specifically not included: ? (end), # (end), % (handled)
 
+	
 	FILE *file = fopen("c:/dc++/hashindex.xml", "rb");
 
 	std::clog << "Opened hash index... ";
