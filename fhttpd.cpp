@@ -426,44 +426,53 @@ int main()
 	otherallowedchars.insert('}');
 	// Specifically not included: ? (end), # (end), % (handled)
 
-	
-	FILE *file = fopen("c:/dc++/hashindex.xml", "rb");
-
-	std::clog << "Opened hash index... ";
-
-	size_t proced = 0;
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
 	wwmap mounted;
 	mounted[L"music"] = L"q:\\music\\";
 	mounted[L"films"] = L"r:\\films\\";
 
-	fseek(file, 0, SEEK_END);
-	const std::wistream::streamoff len = ftell(file);
-	fseek(file, 0, SEEK_SET);
-
-
-	char *fil = new char[len];
-	//fi.read(fil, len);
-	fread(fil, 1, len, file);
-	
-	for (std::wistream::streamoff i = 0; i < len - 32; ++i)
+	FILE *file;
+	errno_t err;
+	if ((err = fopen_s(&file, "c:/dc++/hashindex.xml", "rb")) != 0)
 	{
-		if (fil[i] == L'\n' && fil[i+4] == L'F')
-		{
-			const std::wstring line = utf8decode(std::string(&fil[i+1], std::find(&fil[i+1], &fil[len-1], '\n')-&fil[i+1]));
-
-			const std::wstring::size_type hashpos = line.find(L" Root=\"") + 7;
-			const std::wstring path = line.substr(14, line.find_first_of(L'"', 15)-14);
-			for (wwmap::const_iterator oot = mounted.begin(); oot != mounted.end(); ++oot)
-				if (std::equal(oot->second.begin(), oot->second.end(), path.begin()))
-					hashes[path] = line.substr(hashpos, 39);
-		}
-		if (i % 10000000 == 0)
-			std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
+		char buf[MAX_PATH];
+		std::clog << "Couldn't open hashindex";
+		if (strerror_s(buf, MAX_PATH, err) == 0)
+			std::clog << ": " << buf;
+		std::clog << ".  Hash loading skipped." << std::endl;
 	}
+	else
+	{
+		std::clog << "Opened hash index... ";
 
-	delete []fil;
+		fseek(file, 0, SEEK_END);
+		const std::wistream::streamoff len = ftell(file);
+		fseek(file, 0, SEEK_SET);
+
+
+		char *fil = new char[len];
+		//fi.read(fil, len);
+		fread(fil, 1, len, file);
+		
+		for (std::wistream::streamoff i = 0; i < len - 32; ++i)
+		{
+			if (fil[i] == L'\n' && fil[i+4] == L'F')
+			{
+				const std::wstring line = utf8decode(std::string(&fil[i+1], std::find(&fil[i+1], &fil[len-1], '\n')-&fil[i+1]));
+
+				const std::wstring::size_type hashpos = line.find(L" Root=\"") + 7;
+				const std::wstring path = line.substr(14, line.find_first_of(L'"', 15)-14);
+				for (wwmap::const_iterator oot = mounted.begin(); oot != mounted.end(); ++oot)
+					if (std::equal(oot->second.begin(), oot->second.end(), path.begin()))
+						hashes[path] = line.substr(hashpos, 39);
+			}
+			if (i % 10000000 == 0)
+				std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
+		}
+
+		delete []fil;
+	}
 
 	std::clog << std::endl << "Setting up connection..." << std::endl;
 
