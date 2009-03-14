@@ -12,7 +12,7 @@
 #include <map>
 #include <iomanip>
 #include <algorithm>
-#include <fstream>
+#include <cstdio>
 
 WSADATA wsaData;
 WORD version;
@@ -381,6 +381,7 @@ void xsl(SOCKET client)
 
 int main()
 {
+	std::clog << "Starting.. " << std::endl;
 	TIME_ZONE_INFORMATION tz;
 	GetTimeZoneInformation(&tz);
 	size_t out;
@@ -413,8 +414,10 @@ int main()
 	otherallowedchars.insert('}');
 	// Specifically not included: ? (end), # (end), % (handled)
 
-	std::wifstream fi("c:/dc++/hashindex.xml");
-	std::wstring line;
+	FILE *file = fopen("c:/dc++/hashindex.xml", "rb");
+
+	std::clog << "Opened hash index... ";
+
 	size_t proced = 0;
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
@@ -422,19 +425,34 @@ int main()
 	mounted[L"music"] = L"q:\\music\\";
 	mounted[L"films"] = L"r:\\films\\";
 
-	while (std::getline(fi, line))
+	fseek(file, 0, SEEK_END);
+	const std::wistream::streamoff len = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+
+	char *fil = new char[len];
+	//fi.read(fil, len);
+	fread(fil, 1, len, file);
+	
+	for (std::wistream::streamoff i = 0; i < len - 32; ++i)
 	{
-		if (line[3] == L'F' && line.length() > 14)
+		if (fil[i] == L'\n' && fil[i+4] == L'F')
 		{
+			const std::wstring line = utf8decode(std::string(&fil[i+1], std::find(&fil[i+1], &fil[len-1], '\n')-&fil[i+1]));
+
 			const std::wstring::size_type hashpos = line.find(L" Root=\"") + 7;
 			const std::wstring path = line.substr(14, line.find_first_of(L'"', 15)-14);
 			for (wwmap::const_iterator oot = mounted.begin(); oot != mounted.end(); ++oot)
 				if (std::equal(oot->second.begin(), oot->second.end(), path.begin()))
 					hashes[path] = line.substr(hashpos, 39);
 		}
-		if ((++proced % 10000) == 0)
-			std::cout << proced << ": " << hashes.size() << std::endl;
+		if (i % 10000000 == 0)
+			std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
 	}
+
+	delete []fil;
+
+	std::clog << std::endl << "Setting up connection..." << std::endl;
 
 	version = MAKEWORD( 2, 0 );
 
@@ -469,6 +487,8 @@ int main()
 
 	SOCKET client;
 	int length;
+
+	std::clog << "Ready." << std::endl;
 
 	while (true)
 	{
