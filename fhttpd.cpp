@@ -512,11 +512,10 @@ int main()
 
 	std::clog << "Ready." << std::endl;
 
-	while (true)
+	while (
+		length = sizeof sin,
+		(client = accept( server, (sockaddr *)&sin, &length )) != INVALID_SOCKET)
 	{
-		length = sizeof sin;
-		client = accept( server, (sockaddr *)&sin, &length );
-
 		std::stringstream ss;
 		{
 			const size_t block_sz = 0x3FFF;
