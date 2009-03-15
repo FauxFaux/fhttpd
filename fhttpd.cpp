@@ -229,13 +229,8 @@ void xml_index_page_footer(SOCKET client)
 	send(client, "</FileListing>\r\n");
 }
 
-void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &path)
+void xml_head(SOCKET client, const std::wstring &url)
 {
-	WIN32_FIND_DATA findd;
-	HANDLE h = FindFirstFile((path + L"*").c_str(), &findd);
-	if (h == INVALID_HANDLE_VALUE)
-		throw std::invalid_argument("find failed");
-
 	send_base_headers(client);
 	send(client, "Content-Type: application/xml; charset=utf-8\r\n");
 	send_end_headers(client);
@@ -244,7 +239,17 @@ void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &
 		"<FileListing Version=\"1\" CID=\"ponies\" Base=\"");
 	send(client, htmlspecialchars(url));
 	send(client, "\" Generator=\"fhttpd 0.0\">\r\n");
-	
+
+}
+
+void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &path)
+{
+	WIN32_FIND_DATA findd;
+	HANDLE h = FindFirstFile((path + L"*").c_str(), &findd);
+	if (h == INVALID_HANDLE_VALUE)
+		throw std::invalid_argument("find failed");
+
+	xml_head(client, url);
 
 	do
 	{
@@ -275,10 +280,10 @@ void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &
 
 void index_page(SOCKET client, const mountmap_t &mounted)
 {
-	index_page_header(client);
+	xml_head(client, L"/");
 	for (mountmap_t::const_iterator it = mounted.begin(); it != mounted.end(); ++it)
-		send(client, L"<tr><td>" + link_to(it->first, true) + L"</td><td>&lt;DIR&gt;</td></tr>\r\n");
-	index_page_footer(client);
+		send(client, L"\t<Directory Name=\"" + htmlspecialchars(it->first) + L"/\"/>\r\n");
+	xml_index_page_footer(client);
 }
 
 
