@@ -287,7 +287,7 @@ void index_page(SOCKET client, const mountmap_t &mounted)
 }
 
 
-void error_page(SOCKET client, const int code, const wchar_t *msg)
+void error_page(SOCKET client, const int code, const char *msg)
 {
 	send_base_headers(client, code);
 	send_end_headers(client);
@@ -338,7 +338,14 @@ void xsl(SOCKET client)
 		"</xsl:stylesheet>\r\n");
 }
 
+struct httpexception : std::exception
+{
+	httpexception(int code, const std::string &msg) : code(code), std::exception(msg.c_str())
+	{
+	}
 
+	int code;
+};
 
 int main()
 {
@@ -430,7 +437,6 @@ int main()
 	if ( WSAStartup( version, &wsaData ) != 0 )
 	    return FALSE;
 
-	/* check for correct version */
 	if ( LOBYTE( wsaData.wVersion ) != 2 ||
 	     HIBYTE( wsaData.wVersion ) != 0 )
 	{
@@ -465,103 +471,98 @@ int main()
 		length = sizeof sin,
 		(client = accept( server, (sockaddr *)&sin, &length )) != INVALID_SOCKET)
 	{
-		std::stringstream ss;
+		try
 		{
-			const size_t block_sz = 0x3FFF;
-			char block[block_sz];
-			
-			int red;
-			do
+			std::stringstream ss;
 			{
-				red = recv(client, block, block_sz, 0);
-				if (red == SOCKET_ERROR)
-					break; // XXX TODO
-				block[red] = 0;
-				ss << block;
-			}
-			while(red == block_sz);
-		}
-
-		std::string line;
-		if (!std::getline(ss, line))
-		{
-			error_page(client, 400, L"not a request at all?");
-			return 2; // XXX RETURN;
-		}
-		if (line.substr(0, 4) != "GET ")
-		{
-			error_page(client, 501, L"not a GET request");
-			return 3; // XXX RETURN;
-		}
-		std::string url;
-
-		std::getline(std::stringstream(line.substr(4)), url, ' ');
-		std::wstring wurl = unurl(url);
-		validate_pathname(wurl);
-		if (wurl[0] != '/')
-			throw std::invalid_argument("no preceding slash");
-
-		if (line.substr(5 + url.size()).substr(0,7)  != "HTTP/1.")
-			throw std::invalid_argument("not HTTP/1.");
-
-		//while (std::getline(ss, url))
-			//std::cout << url << std::endl;
-
-		if (wurl.length() == 1)
-			index_page(client, mounted);
-		else
-		{
-			std::wstring::size_type fs = wurl.find(L"/", 1);
-			if (fs == std::wstring::npos || wurl.length() == fs + 1)
-			{
-				std::wstring mountpoint = wurl.substr(1, fs-1);
-				if (mountpoint == L"index.xsl")
-					xsl(client);
-				else if (mounted.find(mountpoint) != mounted.end())
-					xml_index_page(client, wurl, mounted[mountpoint]);
-				else
-					error_page(client, 404, L"not a mountpoint");
-			} else {
-				const std::wstring file = url2path(wurl, mounted);
-
-				DWORD attribs = GetFileAttributes(file.c_str());
-				if (attribs == INVALID_FILE_ATTRIBUTES)
+				const size_t block_sz = 0x3FFF;
+				char block[block_sz];
+				
+				int red;
+				do
 				{
-					WIN32_FIND_DATA findd;
-					if (FindFirstFile(file.c_str(), &findd) == INVALID_HANDLE_VALUE)
-						error_page(client, 404, L"file doesn't exist");
-					else
-						error_page(client, 500, L"can't get attributes, don't know why");
+					red = recv(client, block, block_sz, 0);
+					if (red == SOCKET_ERROR)
+						break; // XXX TODO
+					block[red] = 0;
+					ss << block;
 				}
-				else if ((attribs & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
-					if (*--wurl.end() == L'/')
-						xml_index_page(client, wurl, file);
-					else
-					{
-						send_base_headers(client, 301); // moved perm
-						send(client, L"Location: " + wurl + L'/');
-						send_end_headers(client);
-					}
-				else
+				while(red == block_sz);
+			}
+
+			std::string line;
+			if (!std::getline(ss, line))
+				throw httpexception(400, "not a request at all?");
+
+			if (line.substr(0, 4) != "GET ")
+				throw httpexception(501, "not a GET request");
+
+			std::string url;
+
+			std::getline(std::stringstream(line.substr(4)), url, ' ');
+			std::wstring wurl = unurl(url);
+			validate_pathname(wurl);
+			if (wurl[0] != '/')
+				throw std::invalid_argument("no preceding slash");
+
+			if (line.substr(5 + url.size()).substr(0,7)  != "HTTP/1.")
+				throw std::invalid_argument("not HTTP/1.");
+
+			if (wurl.length() == 1)
+				index_page(client, mounted);
+			else
+			{
+				std::wstring::size_type fs = wurl.find(L"/", 1);
+				if (fs == std::wstring::npos || wurl.length() == fs + 1)
 				{
-					HANDLE h = CreateFile(file.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-					if (h == INVALID_HANDLE_VALUE)
-					{
-						const DWORD err = GetLastError();
-						if (err == ERROR_FILE_NOT_FOUND)
-							error_page(client, 404, L"not found");
-						else if (err == ERROR_ACCESS_DENIED)
-							error_page(client, 403, L"access denied");
-						else
-							error_page(client, 500, L"can't open file, don't know why");
-					}
+					std::wstring mountpoint = wurl.substr(1, fs-1);
+					if (mountpoint == L"index.xsl")
+						xsl(client);
+					else if (mounted.find(mountpoint) != mounted.end())
+						xml_index_page(client, wurl, mounted[mountpoint]);
 					else
+						error_page(client, 404, "not a mountpoint");
+				} else {
+					const std::wstring file = url2path(wurl, mounted);
+
+					DWORD attribs = GetFileAttributes(file.c_str());
+					if (attribs == INVALID_FILE_ATTRIBUTES)
 					{
-						BY_HANDLE_FILE_INFORMATION bhfi;
-						if (!GetFileInformationByHandle(h, &bhfi))
-							error_page(client, 404, L"apparently not a file");
+						WIN32_FIND_DATA findd;
+						if (FindFirstFile(file.c_str(), &findd) == INVALID_HANDLE_VALUE)
+							throw httpexception(404, "file doesn't exist");
+						else
+							throw httpexception(500, "can't get attributes, don't know why");
+					}
+
+					if ((attribs & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
+						if (*--wurl.end() == L'/')
+							xml_index_page(client, wurl, file);
 						else
 						{
+							send_base_headers(client, 301); // moved perm
+							send(client, L"Location: " + wurl + L'/');
+							send_end_headers(client);
+						}
+					else
+					{
+						HANDLE h = CreateFile(file.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+						if (h == INVALID_HANDLE_VALUE)
+						{
+							const DWORD err = GetLastError();
+							if (err == ERROR_FILE_NOT_FOUND)
+								throw httpexception(404, "not found");
+							else if (err == ERROR_ACCESS_DENIED)
+								throw httpexception(403, "access denied");
+							else
+								throw httpexception(500, "can't open file, don't know why");
+						}
+						else
+						{
+							BY_HANDLE_FILE_INFORMATION bhfi;
+							if (!GetFileInformationByHandle(h, &bhfi))
+								throw httpexception(404, "apparently not a file");
+
 							unsigned __int64 file_remaining = filesize(bhfi.nFileSizeHigh, bhfi.nFileSizeLow);
 							send_base_headers(client);
 							std::stringstream resp;
@@ -588,6 +589,14 @@ int main()
 					}
 				}
 			}
+		}
+		catch (httpexception &e)
+		{
+			error_page(client, e.code, e.what());
+		}
+		catch (std::exception &e)
+		{
+			std::clog << e.what() << std::endl;
 		}
 		closesocket(client);
 	}
