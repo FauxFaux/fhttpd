@@ -344,7 +344,56 @@ struct httpexception : std::exception
 	{
 	}
 
-	int code;
+	const int code;
+};
+
+struct win32exception : std::exception
+{
+	win32exception(const std::string &msg, DWORD err = GetLastError()) : err(err), std::exception(msg.c_str())
+	{
+	}
+
+
+
+	const char *what() const
+	{
+		if (!what_.empty())
+			return what_.c_str();
+		std::stringstream out;
+		LPWSTR lpMsgBuf = NULL;
+
+		out << "Win32 error during '" << std::exception::what() << "': ";
+		
+		if (FormatMessage(
+			FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+			FORMAT_MESSAGE_FROM_SYSTEM |
+			FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL,
+			err,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPTSTR) &lpMsgBuf,
+			0, NULL ))
+			out << err << ": " << utf8encode(std::wstring(lpMsgBuf));
+		else
+			out << " (FormatMessage failed: " << GetLastError() << ")";
+
+		LocalFree(lpMsgBuf);
+
+		what_ = out.str();
+		return what_.c_str();
+	}
+
+	const DWORD err;
+	private: mutable std::string what_;
+};
+
+struct winsockexception : std::exception
+{
+	winsockexception(const std::string &msg, int err = WSAGetLastError()) : err(err), std::exception(msg.c_str())
+	{
+	}
+
+	const int err;
 };
 
 int main()
@@ -567,8 +616,9 @@ int main()
 							send_base_headers(client);
 							std::stringstream resp;
 							SYSTEMTIME lmd;
-							resp << "Accept-Ranges: none\r\nConnection:Close\r\nLast-Modified: ";
-							FileTimeToSystemTime(&bhfi.ftLastWriteTime, &lmd);
+							resp << "Accept-Ranges: none\r\nConnection: Close\r\nLast-Modified: ";
+							if (!FileTimeToSystemTime(&bhfi.ftLastWriteTime, &lmd))
+								throw win32exception("FileTimeToSystemTime failed");
 							daterfc1123(resp, &lmd);
 							resp << "\r\nContent-Length: " << file_remaining;
 							resp << "\r\n\r\n";
@@ -583,12 +633,18 @@ int main()
 								DWORD to_transmit = DWORD(file_remaining > block_size ? block_size : file_remaining);
 								file_remaining -= to_transmit;
 								if (!TransmitFile(client, h, to_transmit, 0, NULL, NULL, 0))
-									break;
+									throw winsockexception("TransmitFile");
 							}
 						}
 					}
 				}
 			}
+		}
+		catch (win32exception &e)
+		{
+			const char *msg = e.what();
+			std::clog << "win32 error: " << msg << std::endl;
+			error_page(client, 500, msg);
 		}
 		catch (httpexception &e)
 		{
@@ -598,6 +654,7 @@ int main()
 		{
 			std::clog << e.what() << std::endl;
 		}
+		shutdown(client, SD_SEND);
 		closesocket(client);
 	}
 	WSACleanup();
