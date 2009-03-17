@@ -388,7 +388,7 @@ int main()
 					else if (mounted.find(mountpoint) != mounted.end())
 						xml_index_page(client, wurl, mounted[mountpoint]);
 					else
-						error_page(client, 404, "not a mountpoint");
+						throw httpexception(404, "not a mountpoint");
 				} else {
 					const std::wstring file = url2path(wurl, mounted);
 
@@ -424,35 +424,33 @@ int main()
 							else
 								throw httpexception(500, "can't open file, don't know why");
 						}
-						else
+
+						BY_HANDLE_FILE_INFORMATION bhfi;
+						if (!GetFileInformationByHandle(h, &bhfi))
+							throw httpexception(404, "apparently not a file");
+
+						unsigned __int64 file_remaining = filesize(bhfi.nFileSizeHigh, bhfi.nFileSizeLow);
+						send_base_headers(client);
+						std::stringstream resp;
+						SYSTEMTIME lmd;
+						resp << "Accept-Ranges: none\r\nConnection: Close\r\nLast-Modified: ";
+						if (!FileTimeToSystemTime(&bhfi.ftLastWriteTime, &lmd))
+							throw win32exception("FileTimeToSystemTime failed");
+						daterfc1123(resp, &lmd);
+						resp << "\r\nContent-Length: " << file_remaining;
+						resp << "\r\n\r\n";
+
+						send(client, resp.str().c_str(), resp.str().size(), 0);
+
+						//const DWORD block_size = 0x7fffffff;
+						const DWORD block_size = 1024 * 1024 * 10;
+
+						while (file_remaining > 0)
 						{
-							BY_HANDLE_FILE_INFORMATION bhfi;
-							if (!GetFileInformationByHandle(h, &bhfi))
-								throw httpexception(404, "apparently not a file");
-
-							unsigned __int64 file_remaining = filesize(bhfi.nFileSizeHigh, bhfi.nFileSizeLow);
-							send_base_headers(client);
-							std::stringstream resp;
-							SYSTEMTIME lmd;
-							resp << "Accept-Ranges: none\r\nConnection: Close\r\nLast-Modified: ";
-							if (!FileTimeToSystemTime(&bhfi.ftLastWriteTime, &lmd))
-								throw win32exception("FileTimeToSystemTime failed");
-							daterfc1123(resp, &lmd);
-							resp << "\r\nContent-Length: " << file_remaining;
-							resp << "\r\n\r\n";
-
-							send(client, resp.str().c_str(), resp.str().size(), 0);
-
-							//const DWORD block_size = 0x7fffffff;
-							const DWORD block_size = 1024 * 1024 * 10;
-
-							while (file_remaining > 0)
-							{
-								DWORD to_transmit = DWORD(file_remaining > block_size ? block_size : file_remaining);
-								file_remaining -= to_transmit;
-								if (!TransmitFile(client, h, to_transmit, 0, NULL, NULL, 0))
-									throw winsockexception("TransmitFile");
-							}
+							DWORD to_transmit = DWORD(file_remaining > block_size ? block_size : file_remaining);
+							file_remaining -= to_transmit;
+							if (!TransmitFile(client, h, to_transmit, 0, NULL, NULL, 0))
+								throw winsockexception("TransmitFile");
 						}
 					}
 				}
