@@ -27,7 +27,7 @@ const int US_ENGLISH = 0x409;
 
 struct caseless_cmp_t
 {
-	bool operator() (const std::wstring &l, const std::wstring &r)
+	bool operator() (const std::wstring &l, const std::wstring &r) const
 	{
 		return _wcsicmp(l.c_str(), r.c_str()) < 0;
 	}
@@ -197,8 +197,6 @@ struct win32exception : std::exception
 	win32exception(const std::string &msg, DWORD err = GetLastError()) : err(err), std::exception(msg.c_str())
 	{
 	}
-
-
 
 	const char *what() const
 	{
