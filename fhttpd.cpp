@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <clocale>
+#include <vector>
 #include "util.h"
 
 WSADATA wsaData;
@@ -255,7 +256,7 @@ int main()
 
 	FILE *file;
 	errno_t err;
-	if ((err = fopen_s(&file, "c:/dc++/hashindex.xml", "rb")) != 0)
+	if ((err = fopen_s(&file, "c:/dc++/ 5hashindex.xml", "rb")) != 0)
 	{
 		char buf[MAX_PATH];
 		std::clog << "Couldn't open hashindex";
@@ -338,40 +339,59 @@ int main()
 	{
 		try
 		{
-			std::stringstream ss;
+			std::vector<char> ssh;
 			{
-				const size_t block_sz = 0x3FFF;
+				const size_t block_sz = 0x3FFF; // 16kb	
+				ssh.reserve(4096);
 				char block[block_sz];
 				
 				int red;
-				do
+				const char header_end[] = "\r\n\r\n";
+				while (true)
 				{
 					red = recv(client, block, block_sz, 0);
-					if (red == SOCKET_ERROR)
-						break; // XXX TODO
+					if (red == SOCKET_ERROR || red < 0)
+						throw winsockexception("recv");
 					block[red] = 0;
-					ss << block;
+					std::copy(block, block + red, std::back_inserter(ssh));
+					
+					if (std::search(ssh.begin(), ssh.end(), 
+							header_end, header_end + 4) != ssh.end())
+						break;
 				}
-				while(red == block_sz);
 			}
 
-			std::string line;
-			if (!std::getline(ss, line))
-				throw httpexception(400, "not a request at all?");
+			typedef std::vector<char>::iterator chit_t;
+			chit_t space = std::find(RANGE(ssh), ' ');
+			if (space == ssh.end())
+				throw httpexception(400, "no method space");
 
-			if (line.substr(0, 4) != "GET ")
+			const std::string method(ssh.begin(), space);
+
+			if (method != "GET")
 				throw httpexception(501, "not a GET request");
 
-			std::string url;
+			++space;
+			chit_t space2 = std::find(space, ssh.end(), ' ');
 
-			std::getline(std::stringstream(line.substr(4)), url, ' ');
-			std::wstring wurl = unurl(url);
+			if (space2 == ssh.end())
+				throw httpexception(400, "no url space");
+
+			std::wstring wurl = unurl(std::string(space, space2));
 			validate_pathname(wurl);
 			if (wurl[0] != '/')
-				throw std::invalid_argument("no preceding slash");
+				throw httpexception(400, "no preceding slash");
 
-			if (line.substr(5 + url.size()).substr(0,7)  != "HTTP/1.")
-				throw std::invalid_argument("not HTTP/1.");
+			chit_t newline1 = std::find(space2, ssh.end(), '\n');
+			if (newline1 == ssh.end())
+				throw httpexception(400, "no version");
+
+			++space2;
+			--newline1;
+			const std::string version(space2, newline1);
+
+			if (version != "HTTP/1.0" && version != "HTTP/1.1")
+				throw httpexception(505, "not HTTP/1.");
 
 			if (wurl.length() == 1)
 				index_page(client, mounted);

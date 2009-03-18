@@ -19,3 +19,5 @@ std::wstring url2path(const std::wstring &wurl, const mountmap_t &mounted);
 int send(IN SOCKET s, __in_bcount(len) const char FAR * buf, IN size_t len, IN int flags);
 int send(SOCKET client, const std::wstring &s);
 int send(SOCKET client, const std::string &s);
+
+#define RANGE(x) (x).begin(), (x).end()
