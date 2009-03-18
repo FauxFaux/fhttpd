@@ -256,7 +256,7 @@ int main()
 
 	FILE *file;
 	errno_t err;
-	if ((err = fopen_s(&file, "c:/dc++/ 5hashindex.xml", "rb")) != 0)
+	if ((err = fopen_s(&file, "c:/dc++/hashindex.xml", "rb")) != 0)
 	{
 		char buf[MAX_PATH];
 		std::clog << "Couldn't open hashindex";
@@ -341,8 +341,8 @@ int main()
 		{
 			std::vector<char> ssh;
 			{
-				const size_t block_sz = 0x3FFF; // 16kb	
-				ssh.reserve(4096);
+				const size_t block_sz = 0xfff; // 4kb	
+				ssh.reserve(0xfff);
 				char block[block_sz];
 				
 				int red;
@@ -390,8 +390,10 @@ int main()
 			--newline1;
 			const std::string version(space2, newline1);
 
-			if (version != "HTTP/1.0" && version != "HTTP/1.1")
-				throw httpexception(505, "not HTTP/1.");
+			if (version != "HTTP/1.1")
+				throw httpexception(505, "not HTTP/1.1");
+
+			std::clog << std::string(ssh.begin(), ssh.end());
 
 			if (wurl.length() == 1)
 				index_page(client, mounted);
