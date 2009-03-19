@@ -15,6 +15,8 @@
 #include <cstring>
 #include <clocale>
 
+#include "util.h"
+
 std::set<char> otherallowedchars;
 
 int send(IN SOCKET s, __in_bcount(len) const char FAR * buf, IN size_t len, IN int flags)
@@ -29,9 +31,9 @@ bool isalphahex(const char c)
 	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
 }
 
-unsigned __int64 filesize(DWORD h, DWORD l)
+filesize_t filesize(DWORD h, DWORD l)
 {
-	return (((unsigned __int64)h << 32)) + l;
+	return (((filesize_t)h << 32)) + l;
 }
 
 char alphahex(const char c)

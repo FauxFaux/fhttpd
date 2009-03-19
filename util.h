@@ -1,8 +1,10 @@
 #include <string>
 #include <windows.h>
 
+typedef LONGLONG filesize_t;
+
 bool isalphahex(const char c);
-unsigned __int64 filesize(DWORD h, DWORD l);
+filesize_t filesize(DWORD h, DWORD l);
 char alphahex(const char c);
 std::wstring utf8decode(const std::string &s);
 std::string utf8encode(const std::wstring &s);

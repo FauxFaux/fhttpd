@@ -199,6 +199,10 @@ struct win32exception : std::exception
 	{
 	}
 
+	win32exception(const std::wstring &msg, DWORD err = GetLastError()) : err(err), std::exception(utf8encode(msg).c_str())
+	{
+	}
+
 	const char *what() const
 	{
 		if (!what_.empty())
@@ -231,6 +235,48 @@ struct win32exception : std::exception
 	private: mutable std::string what_;
 };
 
+struct win32mmap
+{
+	win32mmap(const std::wstring &path)
+	{
+		file = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+		if (INVALID_HANDLE_VALUE == file)
+			throw win32exception(L"mmap file " + path);
+
+		mapping = CreateFileMapping(file, NULL, PAGE_READONLY, 0, 0, NULL);
+		if (INVALID_HANDLE_VALUE == mapping)
+			throw win32exception(L"mmap mapping " + path);
+
+		c = static_cast<char*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0));
+		if (NULL == c)
+			throw win32exception(L"mmap mapview " + path);
+	}
+
+	~win32mmap()
+	{
+		UnmapViewOfFile(c);
+		CloseHandle(mapping);
+		CloseHandle(file);
+	}
+
+	const char * const get() const
+	{
+		return c;
+	}
+
+	unsigned __int64 size() const
+	{
+		LARGE_INTEGER size;
+		if (GetFileSizeEx(file, &size))
+			return size.QuadPart;
+		throw win32exception("filesize");
+	}
+
+private:
+	HANDLE file, mapping;
+	char *c;
+};
+
 struct winsockexception : std::exception
 {
 	winsockexception(const std::string &msg, int err = WSAGetLastError()) : err(err), std::exception(msg.c_str())
@@ -254,29 +300,14 @@ int main()
 	mounted[L"music"] = L"\\\\?\\q:\\music";
 	mounted[L"films"] = L"\\\\?\\r:\\films";
 
-	FILE *file;
-	errno_t err;
-	if ((err = fopen_s(&file, "c:/dc++/hashindex.xml", "rb")) != 0)
+	try
 	{
-		char buf[MAX_PATH];
-		std::clog << "Couldn't open hashindex";
-		if (strerror_s(buf, MAX_PATH, err) == 0)
-			std::clog << ": " << buf;
-		std::clog << ".  Hash loading skipped." << std::endl;
-	}
-	else
-	{
+		win32mmap file(L"c:/dc++/hashindex.xml");
 		std::clog << "Opened hash index... ";
 
-		fseek(file, 0, SEEK_END);
-		const std::wistream::streamoff len = ftell(file);
-		fseek(file, 0, SEEK_SET);
-
-
-		char *fil = new char[len];
-		//fi.read(fil, len);
-		fread(fil, 1, len, file);
-		
+		const char * fil = file.get();
+		filesize_t len = file.size();
+	
 		for (std::wistream::streamoff i = 0; i < len - 32; ++i)
 		{
 			if (fil[i] == L'\n' && fil[i+4] == L'F')
@@ -286,15 +317,21 @@ int main()
 				const std::wstring::size_type hashpos = line.find(L" Root=\"") + 7;
 				const std::wstring path = line.substr(14, line.find_first_of(L'"', 15)-14);
 				for (wwmap::const_iterator oot = mounted.begin(); oot != mounted.end(); ++oot)
-					if (std::equal(oot->second.begin(), oot->second.end(), path.begin()))
+					if (path.size() >= oot->second.size() && std::equal(oot->second.begin(), oot->second.end(), path.begin()))
 						hashes[path] = line.substr(hashpos, 39);
 			}
 			if (i % 10000000 == 0)
 				std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
 		}
 
-		delete []fil;
 	}
+	catch (win32exception &e)
+	{
+		char buf[MAX_PATH];
+		std::clog << "Couldn't open hashindex" << e.what()
+			<< ".  Hash loading skipped." << std::endl;
+	}
+
 
 	std::clog << std::endl << "Setting up connection..." << std::endl;
 
