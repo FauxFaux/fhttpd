@@ -320,14 +320,13 @@ int main()
 					if (path.size() >= oot->second.size() && std::equal(oot->second.begin(), oot->second.end(), path.begin()))
 						hashes[path] = line.substr(hashpos, 39);
 			}
-			if (i % 10000000 == 0)
+			if (i % 3000000 == 0)
 				std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
 		}
 
 	}
 	catch (win32exception &e)
 	{
-		char buf[MAX_PATH];
 		std::clog << "Couldn't open hashindex" << e.what()
 			<< ".  Hash loading skipped." << std::endl;
 	}
@@ -443,7 +442,7 @@ int main()
 					if (mountpoint == L"index.xsl")
 						xsl(client);
 					else if (mounted.find(mountpoint) != mounted.end())
-						xml_index_page(client, wurl, mounted[mountpoint]);
+						xml_index_page(client, wurl, mounted[mountpoint] + L"\\");
 					else
 						throw httpexception(404, "not a mountpoint");
 				} else {
