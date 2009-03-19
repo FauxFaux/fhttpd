@@ -251,8 +251,8 @@ int main()
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
 	wwmap mounted;
-	mounted[L"music"] = L"q:\\music\\";
-	mounted[L"films"] = L"r:\\films\\";
+	mounted[L"music"] = L"\\\\?\\q:\\music";
+	mounted[L"films"] = L"\\\\?\\r:\\films";
 
 	FILE *file;
 	errno_t err;
@@ -419,7 +419,7 @@ int main()
 						if (FindFirstFile(file.c_str(), &findd) == INVALID_HANDLE_VALUE)
 							throw httpexception(404, "file doesn't exist");
 						else
-							throw httpexception(500, "can't get attributes, don't know why");
+							throw win32exception("can't get requested file's attributes");
 					}
 
 					if ((attribs & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY)
