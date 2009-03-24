@@ -1,6 +1,5 @@
+#include "stdafx.h"
 #include "util.h"
-#include <iostream>
-#include <sstream>
 
 struct assertion_exception
 {
@@ -11,6 +10,7 @@ struct assertion_exception
 };
 
 #define fail() throw assertion_exception();
+#undef assert
 #define assert(x) if (!(x)) throw assertion_exception();
 #define assert_equals(x, y) if ((x) != (y)) throw assertion_exception(utf8encode(L"Expected " + (x + (L", got " + y))));
 

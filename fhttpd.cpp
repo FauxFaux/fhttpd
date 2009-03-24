@@ -1,21 +1,4 @@
-//cl fhttpd.cpp /link ws2_32.lib mswsock.lib
-#define NOMINMAX
-#define _CRT_SECURE_CPP_OVERLOAD_SECURE_NAMES 1
-#include <winsock2.h>
-#include <mswsock.h>
-#include <windows.h>
-#include <sstream>
-#include <limits>
-#include <iostream>
-#include <set>
-#include <cassert>
-#include <map>
-#include <iomanip>
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
-#include <clocale>
-#include <vector>
+#include "stdafx.h"
 #include "util.h"
 
 WSADATA wsaData;
@@ -286,11 +269,13 @@ struct winsockexception : std::exception
 	const int err;
 };
 
+int
 #ifndef _TEST
-int main()
+wmain
 #else
-int pony()
+pony
 #endif
+(int argc, const wchar_t *argv[])
 {
 	std::clog << "Starting.. " << std::endl;
 	TIME_ZONE_INFORMATION tz;
@@ -300,6 +285,9 @@ int pony()
 	timezone[tz_len - 1] = 0;
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
+	
+	while (*++argv != NULL)
+		std::wcout << *argv << std::endl;
 	wwmap mounted;
 	mounted[L"music"] = L"\\\\?\\q:\\music";
 	mounted[L"films"] = L"\\\\?\\r:\\films";

@@ -1,20 +1,4 @@
-#define NOMINMAX
-#define _CRT_SECURE_CPP_OVERLOAD_SECURE_NAMES 1
-#include <winsock2.h>
-#include <mswsock.h>
-#include <windows.h>
-#include <sstream>
-#include <limits>
-#include <iostream>
-#include <set>
-#include <cassert>
-#include <map>
-#include <iomanip>
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
-#include <clocale>
-
+#include "stdafx.h"
 #include "util.h"
 
 std::set<char> otherallowedchars;

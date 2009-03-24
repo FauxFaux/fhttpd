@@ -1,7 +1,3 @@
-#include <string>
-#include <map>
-#include <windows.h>
-
 typedef LONGLONG filesize_t;
 
 bool isalphahex(const char c);
