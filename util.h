@@ -1,4 +1,5 @@
 #include <string>
+#include <map>
 #include <windows.h>
 
 typedef LONGLONG filesize_t;
@@ -12,8 +13,11 @@ bool urlallowedchar(char c);
 std::wstring unurl(const std::string &s);
 std::string urlize(const std::wstring &ws);
 std::wstring htmlspecialchars(const std::wstring &ws);
+std::wstring htmlspecialchars_decode(const std::wstring &ws);
 void validate_pathname(const std::wstring &wurl);
 std::wstring forward2back(std::wstring w);
+
+bool starts_with(const std::wstring &s, const std::wstring &what);
 
 typedef std::map<std::wstring, std::wstring> mountmap_t;
 std::wstring url2path(const std::wstring &wurl, const mountmap_t &mounted);

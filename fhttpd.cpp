@@ -286,7 +286,11 @@ struct winsockexception : std::exception
 	const int err;
 };
 
+#ifndef _TEST
 int main()
+#else
+int pony()
+#endif
 {
 	std::clog << "Starting.. " << std::endl;
 	TIME_ZONE_INFORMATION tz;
@@ -317,8 +321,8 @@ int main()
 				const std::wstring::size_type hashpos = line.find(L" Root=\"") + 7;
 				const std::wstring path = line.substr(14, line.find_first_of(L'"', 15)-14);
 				for (wwmap::const_iterator oot = mounted.begin(); oot != mounted.end(); ++oot)
-					if (path.size() >= oot->second.size() && std::equal(oot->second.begin(), oot->second.end(), path.begin()))
-						hashes[path] = line.substr(hashpos, 39);
+					if (starts_with(path, oot->second))
+						hashes[htmlspecialchars_decode(path)] = line.substr(hashpos, 39);
 			}
 			if (i % 3000000 == 0)
 				std::clog << static_cast<int>(i/(float)len*100) << "%.. ";
@@ -529,5 +533,6 @@ int main()
 		shutdown(client, SD_SEND);
 		closesocket(client);
 	}
-	WSACleanup();
+
+	return WSACleanup();
 }

@@ -26,6 +26,11 @@ int send(IN SOCKET s, __in_bcount(len) const char FAR * buf, IN size_t len, IN i
 	return send(s, buf, (int)len, flags);
 }
 
+bool starts_with(const std::wstring &s, const std::wstring &what)
+{
+	return s.size() >= what.size() && std::equal(what.begin(), what.end(), s.begin());
+}
+
 bool isalphahex(const char c)
 {
 	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
@@ -156,11 +161,54 @@ std::wstring htmlspecialchars(const std::wstring &ws)
 		else if (*it == L'>')
 			ss << L"&gt;";
 		else if (*it == L'\'')
-			ss << L"&quot;";
+			ss << L"&apos;";
 		else if (*it == L'"')
-			ss << L"&#039;";
+			ss << L"&quot;";
 		else
 			ss << *it;
+	return ss.str();
+}
+
+std::wstring htmlspecialchars_decode(const std::wstring &ws)
+{
+	std::wstringstream ss;
+	std::wstring::const_iterator it = ws.begin(), prev = ws.begin();
+	while ((it = std::find(it, ws.end(), L'&')) != ws.end())
+	{
+		ss << std::wstring(prev, it);
+		std::wstring::const_iterator semi = std::find(it, ws.end(), L';');
+		if (semi == ws.end())
+			throw std::invalid_argument("no semi");
+		++it;
+		const std::wstring token(it, semi);
+		if (token == L"amp")
+			ss << L"&";
+		else if (token == L"lt")
+			ss << L"<";
+		else if (token == L"gt")
+			ss << L">";
+		else if (token == L"quot")
+			ss << L"\"";
+		else if (token == L"apos")
+			ss << L"'";
+		else if (starts_with(token, L"#"))
+		{
+			wchar_t code;
+			std::wstringstream hash(token);
+			hash.ignore();
+			if (hash.peek() == L'x')
+				hash.ignore() >> std::hex >> (short&)code;
+			else
+				hash >> (short&)code;
+			ss << static_cast<wchar_t>(code);
+		}
+		else
+			throw std::invalid_argument("unknown ent");
+
+		it = ++semi;
+		prev = it;
+	}
+	ss << std::wstring(prev, ws.end());
 	return ss.str();
 }
 

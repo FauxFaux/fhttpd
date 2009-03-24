@@ -1,6 +1,7 @@
 *.user
 x64
 Debug
+DebugTest
 Release
 *.ncb
 *.suo
