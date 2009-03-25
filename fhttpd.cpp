@@ -17,155 +17,10 @@ struct caseless_cmp_t
 	}
 };
 
-typedef std::map<std::wstring, std::wstring, caseless_cmp_t> hashes_t;
-hashes_t hashes;
 
+typedef std::map<std::wstring, std::wstring, caseless_cmp_t> caseless_wwmap_t;
+caseless_wwmap_t hashes;
 
-// Thu, 27 Nov 2008 19:25:08 GMT
-std::ostream &daterfc1123(std::ostream &os, const SYSTEMTIME *time = NULL)
-{
-	char buf[MAX_PATH];
-	GetDateFormatA(US_ENGLISH, 0, time, "ddd',' dd MMM yyyy ", &buf[0], MAX_PATH);
-	os << buf;
-	GetTimeFormatA(US_ENGLISH, 0, time, "HH':'mm':'ss ", &buf[0], MAX_PATH);
-	os << buf << timezone;
-	return os;
-}
-
-void send_base_headers(SOCKET client, const int code = 200)
-{
-	std::stringstream resp;
-	resp << "HTTP/1.1 " << code << "\r\nServer: fhttpd 0.00\r\nDate: ";
-	daterfc1123(resp);
-	resp << "\r\n";
-	const std::string ra = resp.str();
-	send(client, ra.c_str(), ra.size(), 0);
-}
-
-void send_end_headers(SOCKET client)
-{
-	send(client, "\r\n", 2, 0);
-}
-
-std::wstring link_to(const std::wstring &s, const bool dir = false)
-{
-	const std::wstring safeurl = htmlspecialchars(s);
-	return L"<a href=\"" + safeurl + (dir ? L"/" : L"") + L"\">" + safeurl + L"</a>";
-}
-
-void xml_index_page_footer(SOCKET client)
-{
-	send(client, "</FileListing>\r\n");
-}
-
-void xml_head(SOCKET client, const std::wstring &url)
-{
-	send_base_headers(client);
-	send(client, "Content-Type: application/xml; charset=utf-8\r\n");
-	send_end_headers(client);
-	send(client, "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\r\n"
-		"<?xml-stylesheet type=\"text/xsl\" href=\"/index.xsl\"?>\r\n"
-		"<FileListing Version=\"1\" CID=\"ponies\" Base=\"");
-	send(client, htmlspecialchars(url));
-	send(client, "\" Generator=\"fhttpd 0.0\">\r\n");
-
-}
-
-void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &path)
-{
-	WIN32_FIND_DATA findd;
-	HANDLE h = FindFirstFile((path + L"*").c_str(), &findd);
-	if (h == INVALID_HANDLE_VALUE)
-		throw std::invalid_argument("find failed");
-
-	xml_head(client, url);
-
-	do
-	{
-		if (findd.cFileName[0] == L'.' && (findd.cFileName[1] == 0 || (findd.cFileName[1] == L'.' && findd.cFileName[2] == 0)))
-			continue;
-		std::wstringstream wss;
-		const bool dir = (findd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY;
-		if (dir)
-			wss << L"\t<Directory";
-		else
-			wss << L"\t<File";
-		wss << L" Name=\"" << htmlspecialchars(findd.cFileName) << L"\"";
-		if (!dir)
-		{
-			wss << L" Size=\"" << filesize(findd.nFileSizeHigh, findd.nFileSizeLow) << L"\"";
-			const std::wstring search = path + findd.cFileName;
-			const hashes_t::const_iterator it = hashes.find(search);
-			if (it != hashes.end())
-				wss << L" TTH=\"" << it->second << "\"";
-		}
-		
-		wss << L"/>\r\n";
-		send(client, wss.str());
-	}
-	while (FindNextFile(h, &findd));
-	xml_index_page_footer(client);
-}
-
-void index_page(SOCKET client, const mountmap_t &mounted)
-{
-	xml_head(client, L"/");
-	for (mountmap_t::const_iterator it = mounted.begin(); it != mounted.end(); ++it)
-		send(client, L"\t<Directory Name=\"" + htmlspecialchars(it->first) + L"/\"/>\r\n");
-	xml_index_page_footer(client);
-}
-
-
-void error_page(SOCKET client, const int code, const char *msg)
-{
-	send_base_headers(client, code);
-	send_end_headers(client);
-	send(client, msg);
-}
-
-void xsl(SOCKET client)
-{
-	send_base_headers(client);
-	send(client, "Content-type: application/xml; charset=utf-8\r\n");
-	send_end_headers(client);
-	send(client, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
-		"<xsl:stylesheet version=\"1.0\"\r\n"
-		"xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">\r\n"
-		"<xsl:template match=\"/\">\r\n"
-		"  <html>\r\n"
-		"    <head><style type=\"text/css\">td { padding: .5ex }</style></head>\r\n"
-		"  <body>\r\n"
-		"    <table border=\"1\">\r\n"
-		"    <tr bgcolor=\"#9acd32\">\r\n"
-		"      <th>Name</th><th>Size</th>\r\n"
-		"    </tr>\r\n"
-		"    <xsl:for-each select=\"FileListing/*\">\r\n"
-		"    <tr>\r\n"
-		"      <td><xsl:element name=\"a\"><xsl:attribute name=\"href\"><xsl:value-of select=\"@Name\"/></xsl:attribute><xsl:value-of select=\"@Name\"/></xsl:element></td>\r\n"
-		"      <td style=\"text-align: right\"><xsl:call-template name=\"format-bytes\"><xsl:with-param name=\"bytes_cnt\" select=\"@Size\"/></xsl:call-template></td>\r\n"
-		"    </tr>\r\n"
-		"    </xsl:for-each>\r\n"
-		"    </table>\r\n"
-		"  </body>\r\n"
-		"  </html>\r\n"
-		"</xsl:template>\r\n"
-		"<xsl:variable name=\"Mega\" select=\"1024 * 1024\"/>\r\n"
-		"<xsl:variable name=\"Giga\" select=\"1024 * $Mega\"/>\r\n"
-		"\r\n"
-		"<xsl:template name=\"format-bytes\">\r\n"
-		"<xsl:param name=\"cnt_bytes\" select=\"@Size\"/>\r\n"
-		"<xsl:choose>\r\n"
-		"        <xsl:when test=\"$cnt_bytes &lt; 1024\"><xsl:value-of select=\"format-number($cnt_bytes, '#,##0')\"/> bytes</xsl:when>\r\n"
-		"        <xsl:when test=\"$cnt_bytes &lt; $Mega\"><xsl:value-of select=\"format-number($cnt_bytes div 1024, '#,###.#')\"/>kb</xsl:when>\r\n"
-		"        <xsl:when test=\"$cnt_bytes &lt; $Giga\"><xsl:value-of select=\"format-number($cnt_bytes div $Mega, '#,###.#')\"/>mb</xsl:when>\r\n"
-		"        <xsl:when test=\"$cnt_bytes\"><xsl:value-of select=\"format-number($cnt_bytes div $Giga, '#,###.#')\"/>gb</xsl:when>\r\n"
-		"        <xsl:otherwise><xsl:text>&#160;</xsl:text></xsl:otherwise>\r\n"
-		"</xsl:choose>\r\n"
-		"</xsl:template>\r\n"
-
-
-		"</xsl:stylesheet>\r\n");
-}
 
 struct httpexception : std::exception
 {
@@ -260,14 +115,159 @@ private:
 	char *c;
 };
 
-struct winsockexception : std::exception
+struct winsockexception : win32exception
 {
-	winsockexception(const std::string &msg, int err = WSAGetLastError()) : err(err), std::exception(msg.c_str())
+	winsockexception(const std::string &msg, int err = WSAGetLastError()) : win32exception(msg.c_str(), err)
 	{
 	}
-
-	const int err;
 };
+
+// Thu, 27 Nov 2008 19:25:08 GMT
+std::ostream &daterfc1123(std::ostream &os, const SYSTEMTIME *time = NULL)
+{
+	char buf[MAX_PATH];
+	GetDateFormatA(US_ENGLISH, 0, time, "ddd',' dd MMM yyyy ", &buf[0], MAX_PATH);
+	os << buf;
+	GetTimeFormatA(US_ENGLISH, 0, time, "HH':'mm':'ss ", &buf[0], MAX_PATH);
+	os << buf << timezone;
+	return os;
+}
+
+void send_base_headers(SOCKET client, const int code = 200)
+{
+	std::stringstream resp;
+	resp << "HTTP/1.1 " << code << "\r\nServer: fhttpd 0.00\r\nDate: ";
+	daterfc1123(resp);
+	resp << "\r\n";
+	const std::string ra = resp.str();
+	send(client, ra.c_str(), ra.size(), 0);
+}
+
+void send_end_headers(SOCKET client)
+{
+	send(client, "\r\n", 2, 0);
+}
+
+std::wstring link_to(const std::wstring &s, const bool dir = false)
+{
+	const std::wstring safeurl = htmlspecialchars(s);
+	return L"<a href=\"" + safeurl + (dir ? L"/" : L"") + L"\">" + safeurl + L"</a>";
+}
+
+void xml_index_page_footer(SOCKET client)
+{
+	send(client, "</FileListing>\r\n");
+}
+
+void xml_head(SOCKET client, const std::wstring &url)
+{
+	send_base_headers(client);
+	send(client, "Content-Type: application/xml; charset=utf-8\r\n");
+	send_end_headers(client);
+	send(client, "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\r\n"
+		"<?xml-stylesheet type=\"text/xsl\" href=\"/index.xsl\"?>\r\n"
+		"<FileListing Version=\"1\" CID=\"ponies\" Base=\"");
+	send(client, htmlspecialchars(url));
+	send(client, "\" Generator=\"fhttpd 0.0\">\r\n");
+
+}
+
+void xml_index_page(SOCKET client, const std::wstring &url, const std::wstring &path)
+{
+	WIN32_FIND_DATA findd;
+	HANDLE h = FindFirstFile((path + L"*").c_str(), &findd);
+	if (h == INVALID_HANDLE_VALUE)
+		throw win32exception("find failed");
+
+	xml_head(client, url);
+
+	do
+	{
+		if (findd.cFileName[0] == L'.' && (findd.cFileName[1] == 0 || (findd.cFileName[1] == L'.' && findd.cFileName[2] == 0)))
+			continue;
+		std::wstringstream wss;
+		const bool dir = (findd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY;
+		if (dir)
+			wss << L"\t<Directory";
+		else
+			wss << L"\t<File";
+		wss << L" Name=\"" << htmlspecialchars(findd.cFileName) << L"\"";
+		if (!dir)
+		{
+			wss << L" Size=\"" << filesize(findd.nFileSizeHigh, findd.nFileSizeLow) << L"\"";
+			const std::wstring search = path + findd.cFileName;
+			const caseless_wwmap_t::const_iterator it = hashes.find(search);
+			if (it != hashes.end())
+				wss << L" TTH=\"" << it->second << "\"";
+		}
+		
+		wss << L"/>\r\n";
+		send(client, wss.str());
+	}
+	while (FindNextFile(h, &findd));
+	xml_index_page_footer(client);
+}
+
+void index_page(SOCKET client, const mountmap_t &mounted)
+{
+	xml_head(client, L"/");
+	for (mountmap_t::const_iterator it = mounted.begin(); it != mounted.end(); ++it)
+		send(client, L"\t<Directory Name=\"" + htmlspecialchars(it->first) + L"/\"/>\r\n");
+	xml_index_page_footer(client);
+}
+
+
+void error_page(SOCKET client, const int code, const char *msg)
+{
+	send_base_headers(client, code);
+	send_end_headers(client);
+	send(client, msg);
+}
+
+void xsl(SOCKET client)
+{
+	send_base_headers(client);
+	send(client, "Content-type: application/xml; charset=utf-8\r\n");
+	send_end_headers(client);
+	send(client, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
+		"<xsl:stylesheet version=\"1.0\"\r\n"
+		"xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">\r\n"
+		"<xsl:template match=\"/\">\r\n"
+		"  <html>\r\n"
+		"    <head><style type=\"text/css\">td { padding: .5ex }</style></head>\r\n"
+		"  <body>\r\n"
+		"    <table border=\"1\">\r\n"
+		"    <tr bgcolor=\"#9acd32\">\r\n"
+		"      <th>Name</th><th>Size</th>\r\n"
+		"    </tr>\r\n"
+		"    <xsl:for-each select=\"FileListing/*\">\r\n"
+		"    <tr>\r\n"
+		"      <td><xsl:element name=\"a\"><xsl:attribute name=\"href\"><xsl:value-of select=\"@Name\"/></xsl:attribute><xsl:value-of select=\"@Name\"/></xsl:element></td>\r\n"
+		"      <td style=\"text-align: right\"><xsl:call-template name=\"format-bytes\"><xsl:with-param name=\"bytes_cnt\" select=\"@Size\"/></xsl:call-template></td>\r\n"
+		"    </tr>\r\n"
+		"    </xsl:for-each>\r\n"
+		"    </table>\r\n"
+		"  </body>\r\n"
+		"  </html>\r\n"
+		"</xsl:template>\r\n"
+		"<xsl:variable name=\"Mega\" select=\"1024 * 1024\"/>\r\n"
+		"<xsl:variable name=\"Giga\" select=\"1024 * $Mega\"/>\r\n"
+		"\r\n"
+		"<xsl:template name=\"format-bytes\">\r\n"
+		"<xsl:param name=\"cnt_bytes\" select=\"@Size\"/>\r\n"
+		"<xsl:choose>\r\n"
+		"        <xsl:when test=\"$cnt_bytes &lt; 1024\"><xsl:value-of select=\"format-number($cnt_bytes, '#,##0')\"/> bytes</xsl:when>\r\n"
+		"        <xsl:when test=\"$cnt_bytes &lt; $Mega\"><xsl:value-of select=\"format-number($cnt_bytes div 1024, '#,###.#')\"/>kb</xsl:when>\r\n"
+		"        <xsl:when test=\"$cnt_bytes &lt; $Giga\"><xsl:value-of select=\"format-number($cnt_bytes div $Mega, '#,###.#')\"/>mb</xsl:when>\r\n"
+		"        <xsl:when test=\"$cnt_bytes\"><xsl:value-of select=\"format-number($cnt_bytes div $Giga, '#,###.#')\"/>gb</xsl:when>\r\n"
+		"        <xsl:otherwise><xsl:text>&#160;</xsl:text></xsl:otherwise>\r\n"
+		"</xsl:choose>\r\n"
+		"</xsl:template>\r\n"
+
+
+		"</xsl:stylesheet>\r\n");
+}
+
 
 int
 #ifndef _TEST
@@ -310,7 +310,7 @@ pony
 	
 	try
 	{
-		win32mmap file(L"c:/dc++/hashindex.xml");
+		win32mmap file(L"c:/dc++ /hashindex.xml");
 		std::clog << "Opened hash index... ";
 
 		const char * fil = file.get();
@@ -394,7 +394,7 @@ pony
 				while (true)
 				{
 					red = recv(client, block, block_sz, 0);
-					if (red == SOCKET_ERROR || red < 0)
+					if (red == SOCKET_ERROR || red <= 0)
 						throw winsockexception("recv");
 					block[red] = 0;
 					std::copy(block, block + red, std::back_inserter(ssh));
@@ -437,7 +437,19 @@ pony
 			if (version != "HTTP/1.1")
 				throw httpexception(505, "not HTTP/1.1");
 
-			std::clog << std::string(ssh.begin(), ssh.end());
+			caseless_wwmap_t headers;
+			chit_t nl = newline1, prev = newline1;
+			const char colon_space[] = ": ";
+			while ((nl = std::find(++nl, ssh.end(), '\n')) != ssh.end())
+			{
+				chit_t colon = std::search(++prev, nl, colon_space, colon_space + 2);
+				if (colon == nl)
+					continue;
+				headers[utf8decode(std::string(prev, colon))] = utf8decode(std::string(colon + 2, nl));
+				prev = nl;
+			}
+
+			//std::clog << std::string(newline1, ssh.end());
 
 			if (wurl.length() == 1)
 				index_page(client, mounted);
