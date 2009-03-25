@@ -275,7 +275,7 @@ wmain
 #else
 pony
 #endif
-(int argc, const wchar_t *argv[])
+(int, const wchar_t *argv[])
 {
 	std::clog << "Starting.. " << std::endl;
 	TIME_ZONE_INFORMATION tz;
@@ -286,12 +286,28 @@ pony
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
 	
-	while (*++argv != NULL)
-		std::wcout << *argv << std::endl;
 	wwmap mounted;
-	mounted[L"music"] = L"\\\\?\\q:\\music";
-	mounted[L"films"] = L"\\\\?\\r:\\films";
 
+	{
+		bool nextismount = false;
+		while (*++argv != NULL)
+		{
+			std::wstring ar(*argv);
+			if (nextismount)
+			{
+				std::wstring::const_iterator it = std::find(RANGE(ar), L'=');
+				if (it == ar.end())
+					throw std::invalid_argument("not -mount arg, missing =: " + utf8encode(ar));
+				mounted[std::wstring(ar.begin(), it - 1)] = std::wstring(++it, ar.end());
+				nextismount = false;
+			}
+			else if (ar == L"-mount")
+				nextismount = true;
+			else
+				throw std::invalid_argument("invalid arg: " + utf8encode(ar));
+		}
+	}
+	
 	try
 	{
 		win32mmap file(L"c:/dc++/hashindex.xml");
