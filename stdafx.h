@@ -1,3 +1,5 @@
+#pragma once
+
 #define NOMINMAX
 #define _CRT_SECURE_CPP_OVERLOAD_SECURE_NAMES 1
 #include <winsock2.h>

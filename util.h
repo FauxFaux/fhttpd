@@ -1,3 +1,5 @@
+#pragma once
+
 typedef LONGLONG filesize_t;
 
 bool isalphahex(const char c);
