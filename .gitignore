@@ -4,4 +4,5 @@ Debug
 DebugTest
 Release
 *.ncb
+*.sdf
 *.suo
