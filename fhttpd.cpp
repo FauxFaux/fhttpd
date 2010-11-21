@@ -6,7 +6,7 @@ WSADATA wsaData;
 WORD version;
 
 const size_t tz_len = 4;
-char timezone[tz_len];
+char rfc_timezone[tz_len];
 
 const int US_ENGLISH = 0x409;
 
@@ -72,7 +72,7 @@ std::ostream &daterfc1123(std::ostream &os, const SYSTEMTIME *time = NULL)
 	GetDateFormatA(US_ENGLISH, 0, time, "ddd',' dd MMM yyyy ", &buf[0], MAX_PATH);
 	os << buf;
 	GetTimeFormatA(US_ENGLISH, 0, time, "HH':'mm':'ss ", &buf[0], MAX_PATH);
-	os << buf << timezone;
+	os << buf << rfc_timezone;
 	return os;
 }
 
@@ -224,8 +224,8 @@ pony
 	TIME_ZONE_INFORMATION tz;
 	GetTimeZoneInformation(&tz);
 	size_t out;
-	wcstombs_s(&out, timezone, tz_len, tz.StandardName, _TRUNCATE);
-	timezone[tz_len - 1] = 0;
+	wcstombs_s(&out, rfc_timezone, tz_len, tz.StandardName, _TRUNCATE);
+	rfc_timezone[tz_len - 1] = 0;
 
 	typedef std::map<std::wstring, std::wstring> wwmap;
 	
